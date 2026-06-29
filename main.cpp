@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <ctime>
 
-// Game window size
 const int CELL  = 20;
 const int COLS  = 30;
 const int ROWS  = 30;
@@ -19,9 +18,31 @@ const int RIGHT = 3;
 
 std::vector<sf::Vector2i> snake;
 
+sf::Vector2i food;       // NEW: food position
 int dir     = RIGHT;
 int nextDir = RIGHT;
 bool started = false;
+
+// NEW: place food at a random empty cell
+void spawnFood()
+{
+    bool blocked = true;
+    while (blocked)
+    {
+        food.x = rand() % COLS;
+        food.y = rand() % ROWS;
+
+        blocked = false;
+        for (int i = 0; i < (int)snake.size(); i++)
+        {
+            if (snake[i] == food)
+            {
+                blocked = true;
+                break;
+            }
+        }
+    }
+}
 
 void startGame()
 {
@@ -36,6 +57,9 @@ void startGame()
     dir     = RIGHT;
     nextDir = RIGHT;
     started = true;
+
+    srand((unsigned)time(0));
+    spawnFood();   // NEW: spawn first food when game starts
 }
 
 void moveSnake()
@@ -52,7 +76,16 @@ void moveSnake()
     if (dir == RIGHT) newHead.x += 1;
 
     snake.insert(snake.begin(), newHead);
-    snake.pop_back();
+
+    // NEW: if snake eats food, grow instead of removing tail
+    if (newHead == food)
+    {
+        spawnFood();
+    }
+    else
+    {
+        snake.pop_back();
+    }
 }
 
 void drawSquare(sf::RenderWindow& win, int gx, int gy, sf::Color color)
@@ -115,7 +148,6 @@ int main()
 
         window.clear(sf::Color(18, 18, 18));
 
-        //grid lines
         for (int x = 0; x <= COLS; x++)
         {
             sf::RectangleShape line(sf::Vector2f(1.f, H));
@@ -133,6 +165,9 @@ int main()
 
         if (started)
         {
+            // NEW: draw food as red square
+            drawSquare(window, food.x, food.y, sf::Color(210, 45, 45));
+
             for (int i = 0; i < (int)snake.size(); i++)
             {
                 sf::Color c = (i == 0) ? sf::Color(0, 220, 70) : sf::Color(0, 150, 55);
