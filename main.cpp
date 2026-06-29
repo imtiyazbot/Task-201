@@ -2,6 +2,8 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <string>
+#include <sstream>
 
 const int CELL  = 20;
 const int COLS  = 30;
@@ -18,12 +20,12 @@ const int RIGHT = 3;
 
 std::vector<sf::Vector2i> snake;
 
-sf::Vector2i food;       // NEW: food position
+sf::Vector2i food;
 int dir     = RIGHT;
 int nextDir = RIGHT;
+int score   = 0;        // score variable
 bool started = false;
 
-// NEW: place food at a random empty cell
 void spawnFood()
 {
     bool blocked = true;
@@ -56,10 +58,11 @@ void startGame()
 
     dir     = RIGHT;
     nextDir = RIGHT;
+    score   = 0;         //reset score on new game
     started = true;
 
     srand((unsigned)time(0));
-    spawnFood();   // NEW: spawn first food when game starts
+    spawnFood();
 }
 
 void moveSnake()
@@ -77,9 +80,9 @@ void moveSnake()
 
     snake.insert(snake.begin(), newHead);
 
-    // NEW: if snake eats food, grow instead of removing tail
     if (newHead == food)
     {
+        score += 10;     // increase score by 10
         spawnFood();
     }
     else
@@ -100,6 +103,19 @@ int main()
 {
     sf::RenderWindow window(sf::VideoMode(W, H), "Snake Game");
     window.setFramerateLimit(60);
+
+    // load font and score text
+    sf::Font font;
+    bool fontLoaded = font.loadFromFile("arial.ttf");
+
+    sf::Text scoreTxt;
+    if (fontLoaded)
+    {
+        scoreTxt.setFont(font);
+        scoreTxt.setCharacterSize(18);
+        scoreTxt.setFillColor(sf::Color::White);
+        scoreTxt.setPosition(8.f, 4.f);
+    }
 
     sf::Clock clock;
     float timePassed = 0.f;
@@ -165,13 +181,21 @@ int main()
 
         if (started)
         {
-            // NEW: draw food as red square
             drawSquare(window, food.x, food.y, sf::Color(210, 45, 45));
 
             for (int i = 0; i < (int)snake.size(); i++)
             {
                 sf::Color c = (i == 0) ? sf::Color(0, 220, 70) : sf::Color(0, 150, 55);
                 drawSquare(window, snake[i].x, snake[i].y, c);
+            }
+
+            //draw score on screen
+            if (fontLoaded)
+            {
+                std::ostringstream ss;
+                ss << "Score: " << score;
+                scoreTxt.setString(ss.str());
+                window.draw(scoreTxt);
             }
         }
 
