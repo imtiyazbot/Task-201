@@ -23,7 +23,8 @@ std::vector<sf::Vector2i> snake;
 sf::Vector2i food;
 int dir     = RIGHT;
 int nextDir = RIGHT;
-int score   = 0;        // score variable
+int score   = 0;
+bool over    = false;   // game over flag
 bool started = false;
 
 void spawnFood()
@@ -58,7 +59,8 @@ void startGame()
 
     dir     = RIGHT;
     nextDir = RIGHT;
-    score   = 0;         //reset score on new game
+    score   = 0;
+    over    = false;    // reset game over flag
     started = true;
 
     srand((unsigned)time(0));
@@ -78,11 +80,29 @@ void moveSnake()
     if (dir == LEFT)  newHead.x -= 1;
     if (dir == RIGHT) newHead.x += 1;
 
+    // NEW: wall collision check
+    if (newHead.x < 0 || newHead.x >= COLS ||
+        newHead.y < 0 || newHead.y >= ROWS)
+    {
+        over = true;
+        return;
+    }
+
+    //self collision check
+    for (int i = 0; i < (int)snake.size(); i++)
+    {
+        if (snake[i] == newHead)
+        {
+            over = true;
+            return;
+        }
+    }
+
     snake.insert(snake.begin(), newHead);
 
     if (newHead == food)
     {
-        score += 10;     // increase score by 10
+        score += 10;
         spawnFood();
     }
     else
@@ -99,12 +119,19 @@ void drawSquare(sf::RenderWindow& win, int gx, int gy, sf::Color color)
     win.draw(sq);
 }
 
+// helper to center text on screen
+void centerOn(sf::Text& t, float yPos)
+{
+    sf::FloatRect b = t.getLocalBounds();
+    t.setOrigin(b.left + b.width / 2.f, b.top + b.height / 2.f);
+    t.setPosition(W / 2.f, yPos);
+}
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(W, H), "Snake Game");
     window.setFramerateLimit(60);
 
-    // load font and score text
     sf::Font font;
     bool fontLoaded = font.loadFromFile("arial.ttf");
 
@@ -116,6 +143,18 @@ int main()
         scoreTxt.setFillColor(sf::Color::White);
         scoreTxt.setPosition(8.f, 4.f);
     }
+
+    //big and small text for overlays
+    sf::Text bigTxt, smallTxt;
+    if (fontLoaded)
+    {
+        bigTxt.setFont(font);   bigTxt.setCharacterSize(40);
+        smallTxt.setFont(font); smallTxt.setCharacterSize(20);
+    }
+
+    //dark overlay rectangle for screens
+    sf::RectangleShape darkOverlay(sf::Vector2f(W, H));
+    darkOverlay.setFillColor(sf::Color(0, 0, 0, 170));
 
     sf::Clock clock;
     float timePassed = 0.f;
@@ -139,8 +178,9 @@ int main()
                 if (e.key.code == sf::Keyboard::Right || e.key.code == sf::Keyboard::D)
                     nextDir = RIGHT;
 
+                // Enter now also restarts after game over
                 if (e.key.code == sf::Keyboard::Return)
-                    if (!started)
+                    if (!started || over)
                         startGame();
 
                 if (e.key.code == sf::Keyboard::Escape)
@@ -148,7 +188,8 @@ int main()
             }
         }
 
-        if (started)
+        // stop updating when game is over
+        if (started && !over)
         {
             timePassed += clock.restart().asSeconds();
             if (timePassed >= SPEED)
@@ -189,13 +230,50 @@ int main()
                 drawSquare(window, snake[i].x, snake[i].y, c);
             }
 
-            //draw score on screen
             if (fontLoaded)
             {
                 std::ostringstream ss;
                 ss << "Score: " << score;
                 scoreTxt.setString(ss.str());
                 window.draw(scoreTxt);
+            }
+        }
+
+        // start screen overlay
+        if (!started)
+        {
+            window.draw(darkOverlay);
+            if (fontLoaded)
+            {
+                bigTxt.setString("SNAKE");
+                bigTxt.setFillColor(sf::Color(0, 220, 70));
+                centerOn(bigTxt, H / 2.f - 55.f);
+                window.draw(bigTxt);
+
+                smallTxt.setString("Press ENTER to Start\n\nArrow Keys or WASD to move\n\nESC to Quit");
+                smallTxt.setFillColor(sf::Color(210, 210, 210));
+                centerOn(smallTxt, H / 2.f + 35.f);
+                window.draw(smallTxt);
+            }
+        }
+
+        //game over screen overlay
+        else if (over)
+        {
+            window.draw(darkOverlay);
+            if (fontLoaded)
+            {
+                bigTxt.setString("GAME OVER");
+                bigTxt.setFillColor(sf::Color(210, 45, 45));
+                centerOn(bigTxt, H / 2.f - 65.f);
+                window.draw(bigTxt);
+
+                std::ostringstream ss;
+                ss << "Score: " << score << "\n\nPress ENTER to Play Again\n\nESC to Quit";
+                smallTxt.setString(ss.str());
+                smallTxt.setFillColor(sf::Color(210, 210, 210));
+                centerOn(smallTxt, H / 2.f + 25.f);
+                window.draw(smallTxt);
             }
         }
 
