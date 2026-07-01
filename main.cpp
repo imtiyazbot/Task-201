@@ -5,102 +5,166 @@
 #include <string>
 #include <sstream>
 
-const int CELL  = 20;
-const int COLS  = 30;
-const int ROWS  = 30;
-const int W     = CELL * COLS;
-const int H     = CELL * ROWS;
+//testing
+int foodcount = 0;
+bool poisonfood = false;
 
-const float SPEED = 0.12f;
+//  SETTINGS
 
-const int UP    = 0;
-const int DOWN  = 1;
-const int LEFT  = 2;
-const int RIGHT = 3;
+const int CELL_SIZE = 20;
+const int COLUMNS = 30;
+const int ROWS = 30;
+
+const int WINDOW_WIDTH = CELL_SIZE * COLUMNS;
+const int WINDOW_HEIGHT = CELL_SIZE * ROWS;
+
+const float MOVE_DELAY = 0.005f;
+
+// Directions
+const int DIR_UP = 0;
+const int DIR_DOWN = 1;
+const int DIR_LEFT = 2;
+const int DIR_RIGHT = 3;
+
+// GAME STATE
 
 std::vector<sf::Vector2i> snake;
-
 sf::Vector2i food;
-int dir     = RIGHT;
-int nextDir = RIGHT;
-int score   = 0;
-bool over    = false;   // game over flag
-bool started = false;
+
+int currentDirection = DIR_RIGHT;
+int requestedDirection = DIR_RIGHT;
+
+int score = 0;
+bool gameOver = false;
+bool gameStarted = false;
+
+// Picks a random empty cell for the food to appear in
 
 void spawnFood()
 {
-    bool blocked = true;
-    while (blocked)
+    bool cellIsBlocked = true;
+    while (cellIsBlocked)
     {
-        food.x = rand() % COLS;
+        food.x = rand() % COLUMNS;
         food.y = rand() % ROWS;
 
-        blocked = false;
+        // Assume the position is empty
+        cellIsBlocked = false;
+
+        // Check if food is on the snake
         for (int i = 0; i < (int)snake.size(); i++)
         {
             if (snake[i] == food)
             {
-                blocked = true;
+                cellIsBlocked = true;
                 break;
             }
         }
     }
 }
 
-void startGame()
+// Reset everything for a new game
+
+void resetGame()
 {
+    // Remove old snake
     snake.clear();
+    int centerX = COLUMNS / 2;
+    int centerY = ROWS / 2;
 
-    int cx = COLS / 2;
-    int cy = ROWS / 2;
-    snake.push_back({ cx,     cy });
-    snake.push_back({ cx - 1, cy });
-    snake.push_back({ cx - 2, cy });
+    // Create a snake with 3 blocks
+    snake.push_back(sf::Vector2i(centerX, centerY));      // Head
+    snake.push_back(sf::Vector2i(centerX - 1, centerY));  // Body
+    snake.push_back(sf::Vector2i(centerX - 2, centerY));  // Tail
 
-    dir     = RIGHT;
-    nextDir = RIGHT;
-    score   = 0;
-    over    = false;    // reset game over flag
-    started = true;
+    currentDirection = DIR_RIGHT;
+    requestedDirection = DIR_RIGHT;
+    score = 0;
+    gameOver = false;
+    gameStarted = true;
 
     srand((unsigned)time(0));
     spawnFood();
 }
+// can't reverse straight into snake's own body
+
+void updateDirection()
+{
+    if (requestedDirection == DIR_UP && currentDirection != DIR_DOWN)
+        currentDirection = DIR_UP;
+
+    if (requestedDirection == DIR_DOWN && currentDirection != DIR_UP)
+        currentDirection = DIR_DOWN;
+
+    if (requestedDirection == DIR_LEFT && currentDirection != DIR_RIGHT)
+        currentDirection = DIR_LEFT;
+
+    if (requestedDirection == DIR_RIGHT && currentDirection != DIR_LEFT)
+        currentDirection = DIR_RIGHT;
+}
+
+// Calculates the next position of the snake's head
+
+sf::Vector2i getNextHeadPosition()
+{
+    sf::Vector2i nextHead = snake[0];
+
+    if (currentDirection == DIR_UP)
+        nextHead.y--;
+
+    if (currentDirection == DIR_DOWN)
+        nextHead.y++;
+
+    if (currentDirection == DIR_LEFT)
+        nextHead.x--;
+
+    if (currentDirection == DIR_RIGHT)
+        nextHead.x++;
+
+    return nextHead;
+}
+
+// if snake hits wall
+
+bool hitWall(sf::Vector2i position)
+{
+    if (position.x < 0 || position.x >= COLUMNS)
+        return true;
+
+    if (position.y < 0 || position.y >= ROWS)
+        return true;
+
+    return false;
+}
+
+// if snake hits itself
+
+bool hitSelf(sf::Vector2i position)
+{
+    for (int i = 0; i < (int)snake.size(); i++)
+    {
+        if (snake[i] == position)
+            return true;
+    }
+    return false;
+}
+
+// Move the snake
 
 void moveSnake()
 {
-    if (nextDir == UP    && dir != DOWN)  dir = UP;
-    if (nextDir == DOWN  && dir != UP)    dir = DOWN;
-    if (nextDir == LEFT  && dir != RIGHT) dir = LEFT;
-    if (nextDir == RIGHT && dir != LEFT)  dir = RIGHT;
+    updateDirection();
+    sf::Vector2i nextHead = getNextHeadPosition();
 
-    sf::Vector2i newHead = snake[0];
-    if (dir == UP)    newHead.y -= 1;
-    if (dir == DOWN)  newHead.y += 1;
-    if (dir == LEFT)  newHead.x -= 1;
-    if (dir == RIGHT) newHead.x += 1;
-
-    // NEW: wall collision check
-    if (newHead.x < 0 || newHead.x >= COLS ||
-        newHead.y < 0 || newHead.y >= ROWS)
+    if (hitWall(nextHead) || hitSelf(nextHead))
     {
-        over = true;
+        gameOver = true;
         return;
     }
+    // Add new head
+    snake.insert(snake.begin(), nextHead);
 
-    //self collision check
-    for (int i = 0; i < (int)snake.size(); i++)
-    {
-        if (snake[i] == newHead)
-        {
-            over = true;
-            return;
-        }
-    }
-
-    snake.insert(snake.begin(), newHead);
-
-    if (newHead == food)
+    if (nextHead == food)
     {
         score += 10;
         spawnFood();
@@ -110,89 +174,137 @@ void moveSnake()
         snake.pop_back();
     }
 }
+// INPUT
 
-void drawSquare(sf::RenderWindow& win, int gx, int gy, sf::Color color)
+void handleInput(sf::RenderWindow& window)
 {
-    sf::RectangleShape sq(sf::Vector2f(CELL - 2.f, CELL - 2.f));
-    sq.setPosition(gx * CELL + 1.f, gy * CELL + 1.f);
-    sq.setFillColor(color);
-    win.draw(sq);
+    sf::Event event;
+
+    while (window.pollEvent(event))
+    {
+        if (event.type == sf::Event::Closed)
+        {
+            window.close();
+        }
+
+        if (event.type == sf::Event::KeyPressed)
+        {
+            // Movement
+            if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::W)
+                requestedDirection = DIR_UP;
+
+            if (event.key.code == sf::Keyboard::Down || event.key.code == sf::Keyboard::S)
+                requestedDirection = DIR_DOWN;
+
+            if (event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::A)
+                requestedDirection = DIR_LEFT;
+
+            if (event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::D)
+                requestedDirection = DIR_RIGHT;
+
+            // Start or Restart
+            if (event.key.code == sf::Keyboard::Return)
+            {
+                if (!gameStarted || gameOver)
+                    resetGame();
+            }
+
+            // Quit
+            if (event.key.code == sf::Keyboard::Escape)
+                window.close();
+        }
+    }
 }
 
-// helper to center text on screen
-void centerOn(sf::Text& t, float yPos)
+// Draw a single square on the grid
+
+void drawSquare(sf::RenderWindow& window, int gridX, int gridY, sf::Color color)
 {
-    sf::FloatRect b = t.getLocalBounds();
-    t.setOrigin(b.left + b.width / 2.f, b.top + b.height / 2.f);
-    t.setPosition(W / 2.f, yPos);
+    sf::RectangleShape square;
+
+    square.setSize(sf::Vector2f(CELL_SIZE - 2, CELL_SIZE - 2));
+    square.setPosition(gridX * CELL_SIZE + 1, gridY * CELL_SIZE + 1);
+    square.setFillColor(color);
+
+    window.draw(square);
 }
+
+// Center text
+
+void centerText(sf::Text& text, float yPos)
+{
+    sf::FloatRect bounds = text.getLocalBounds();
+
+    text.setOrigin(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2
+    );
+
+    text.setPosition(WINDOW_WIDTH / 2, yPos);
+}
+// MAIN
 
 int main()
 {
-    sf::RenderWindow window(sf::VideoMode(W, H), "Snake Game");
+    srand((unsigned)time(0));
+
+    sf::RenderWindow window(
+        sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT),
+        "Snake Game"
+    );
+
     window.setFramerateLimit(60);
 
+    // Load font
     sf::Font font;
     bool fontLoaded = font.loadFromFile("arial.ttf");
 
-    sf::Text scoreTxt;
+    // Score text
+    sf::Text scoreText;
     if (fontLoaded)
     {
-        scoreTxt.setFont(font);
-        scoreTxt.setCharacterSize(18);
-        scoreTxt.setFillColor(sf::Color::White);
-        scoreTxt.setPosition(8.f, 4.f);
+        scoreText.setFont(font);
+        scoreText.setCharacterSize(18);
+        scoreText.setFillColor(sf::Color::White);
+        scoreText.setPosition(8.f, 4.f);
     }
 
-    //big and small text for overlays
-    sf::Text bigTxt, smallTxt;
+    // Menu texts
+    sf::Text bigText,smallText;
+
     if (fontLoaded)
     {
-        bigTxt.setFont(font);   bigTxt.setCharacterSize(40);
-        smallTxt.setFont(font); smallTxt.setCharacterSize(20);
+        bigText.setFont(font);
+        bigText.setCharacterSize(40);
+
+        smallText.setFont(font);
+        smallText.setCharacterSize(20);
     }
 
-    //dark overlay rectangle for screens
-    sf::RectangleShape darkOverlay(sf::Vector2f(W, H));
+    // Dark overlay for menus
+    sf::RectangleShape darkOverlay(
+        sf::Vector2f(WINDOW_WIDTH, WINDOW_HEIGHT)
+    );
+
     darkOverlay.setFillColor(sf::Color(0, 0, 0, 170));
 
+    // Timer
     sf::Clock clock;
     float timePassed = 0.f;
 
+    // Game Loop
+
     while (window.isOpen())
     {
-        sf::Event e;
-        while (window.pollEvent(e))
-        {
-            if (e.type == sf::Event::Closed)
-                window.close();
+        // Handle input
+        handleInput(window);
 
-            if (e.type == sf::Event::KeyPressed)
-            {
-                if (e.key.code == sf::Keyboard::Up    || e.key.code == sf::Keyboard::W)
-                    nextDir = UP;
-                if (e.key.code == sf::Keyboard::Down  || e.key.code == sf::Keyboard::S)
-                    nextDir = DOWN;
-                if (e.key.code == sf::Keyboard::Left  || e.key.code == sf::Keyboard::A)
-                    nextDir = LEFT;
-                if (e.key.code == sf::Keyboard::Right || e.key.code == sf::Keyboard::D)
-                    nextDir = RIGHT;
-
-                // Enter now also restarts after game over
-                if (e.key.code == sf::Keyboard::Return)
-                    if (!started || over)
-                        startGame();
-
-                if (e.key.code == sf::Keyboard::Escape)
-                    window.close();
-            }
-        }
-
-        // stop updating when game is over
-        if (started && !over)
+        // Update game
+        if (gameStarted && !gameOver)
         {
             timePassed += clock.restart().asSeconds();
-            if (timePassed >= SPEED)
+
+            if (timePassed >= MOVE_DELAY)
             {
                 timePassed = 0.f;
                 moveSnake();
@@ -203,77 +315,109 @@ int main()
             clock.restart();
         }
 
+        // Begin drawing
         window.clear(sf::Color(18, 18, 18));
 
-        for (int x = 0; x <= COLS; x++)
+        // Draw grid
+        for (int x = 0; x <= COLUMNS; x++)
         {
-            sf::RectangleShape line(sf::Vector2f(1.f, H));
-            line.setPosition(x * CELL, 0);
+            sf::RectangleShape line;
+
+            line.setSize(sf::Vector2f(1.f, WINDOW_HEIGHT));
+            line.setPosition(x * CELL_SIZE, 0.f);
             line.setFillColor(sf::Color(38, 38, 38));
-            window.draw(line);
-        }
-        for (int y = 0; y <= ROWS; y++)
-        {
-            sf::RectangleShape line(sf::Vector2f(W, 1.f));
-            line.setPosition(0, y * CELL);
-            line.setFillColor(sf::Color(38, 38, 38));
+
             window.draw(line);
         }
 
-        if (started)
+        for (int y = 0; y <= ROWS; y++)
+        {
+            sf::RectangleShape line;
+
+            line.setSize(sf::Vector2f(WINDOW_WIDTH, 1.f));
+            line.setPosition(0.f, y * CELL_SIZE);
+            line.setFillColor(sf::Color(38, 38, 38));
+
+            window.draw(line);
+        }
+
+        // Draw game objects
+        if (gameStarted)
         {
             drawSquare(window, food.x, food.y, sf::Color(210, 45, 45));
 
             for (int i = 0; i < (int)snake.size(); i++)
             {
-                sf::Color c = (i == 0) ? sf::Color(0, 220, 70) : sf::Color(0, 150, 55);
-                drawSquare(window, snake[i].x, snake[i].y, c);
+                sf::Color color;
+
+                if (i == 0)
+                    color = sf::Color(0, 220, 70);
+                else
+                    color = sf::Color(0, 150, 55);
+
+                drawSquare(window, snake[i].x, snake[i].y, color);
             }
 
+            // Draw score
             if (fontLoaded)
             {
                 std::ostringstream ss;
                 ss << "Score: " << score;
-                scoreTxt.setString(ss.str());
-                window.draw(scoreTxt);
+
+                scoreText.setString(ss.str());
+
+                window.draw(scoreText);
             }
         }
 
-        // start screen overlay
-        if (!started)
+        // START SCREEN
+
+        if (!gameStarted)
         {
             window.draw(darkOverlay);
+
             if (fontLoaded)
             {
-                bigTxt.setString("SNAKE");
-                bigTxt.setFillColor(sf::Color(0, 220, 70));
-                centerOn(bigTxt, H / 2.f - 55.f);
-                window.draw(bigTxt);
+                bigText.setString("SNAKE");
+                bigText.setFillColor(sf::Color(0, 220, 70));
+                centerText(bigText, WINDOW_HEIGHT / 2.f - 55.f);
+                window.draw(bigText);
 
-                smallTxt.setString("Press ENTER to Start\n\nArrow Keys or WASD to move\n\nESC to Quit");
-                smallTxt.setFillColor(sf::Color(210, 210, 210));
-                centerOn(smallTxt, H / 2.f + 35.f);
-                window.draw(smallTxt);
+                smallText.setString(
+                    "Press ENTER to Start\n\n"
+                    "Arrow Keys or WASD to move\n\n"
+                    "ESC to Quit"
+                );
+
+                smallText.setFillColor(sf::Color(210, 210, 210));
+                centerText(smallText, WINDOW_HEIGHT / 2.f + 35.f);
+                window.draw(smallText);
             }
         }
 
-        //game over screen overlay
-        else if (over)
+        // GAME OVER SCREEN
+
+        else if (gameOver)
         {
             window.draw(darkOverlay);
+
             if (fontLoaded)
             {
-                bigTxt.setString("GAME OVER");
-                bigTxt.setFillColor(sf::Color(210, 45, 45));
-                centerOn(bigTxt, H / 2.f - 65.f);
-                window.draw(bigTxt);
+                bigText.setString("GAME OVER");
+                bigText.setFillColor(sf::Color(210, 45, 45));
+                centerText(bigText, WINDOW_HEIGHT / 2.f - 65.f);
+                window.draw(bigText);
 
                 std::ostringstream ss;
-                ss << "Score: " << score << "\n\nPress ENTER to Play Again\n\nESC to Quit";
-                smallTxt.setString(ss.str());
-                smallTxt.setFillColor(sf::Color(210, 210, 210));
-                centerOn(smallTxt, H / 2.f + 25.f);
-                window.draw(smallTxt);
+
+                ss << "Score: " << score
+                   << "\n\nPress ENTER to Play Again"
+                   << "\n\nESC to Quit";
+
+                smallText.setString(ss.str());
+                smallText.setFillColor(sf::Color(210, 210, 210));
+                centerText(smallText, WINDOW_HEIGHT / 2.f + 25.f);
+                window.draw(smallText);
             }
         }
 
