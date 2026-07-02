@@ -5,10 +5,6 @@
 #include <string>
 #include <sstream>
 
-//testing
-int foodcount = 0;
-bool poisonfood = false;
-
 //  SETTINGS
 
 const int CELL_SIZE = 20;
